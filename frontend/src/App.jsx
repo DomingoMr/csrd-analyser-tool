@@ -5,6 +5,16 @@ import CsvDownloadButton from './components/CsvDownloadButton';
 const categoryOrder = ['E', 'S', 'G'];
 const MAX_FILES = 4;
 
+const loadingMessages = [
+  "Analizando documento... Tiempo estimado: 5 minutos",
+  "Admirando los colores y las imagenes...",
+  "Aprovecha para tomarte un café o un té",
+  "Te diría que te relajes, pero no quiero que te duermas",
+  "Vamos por la mitad, unos minutitos mas...",
+  "Ya casi lo tenemos, no te vayas...",
+  "Listo en un minutito..."
+];
+
 const categoryConfig = {
   E: { label: 'Environmental' },
   S: { label: 'Social' },
@@ -83,6 +93,7 @@ export default function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentFileName, setCurrentFileName] = useState('');
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
 
   const inputRef = useRef(null);
 
@@ -200,6 +211,11 @@ export default function App() {
     setResult(null);
     setProgress(0);
     setCurrentFileName('');
+    setLoadingMessageIndex(0);
+
+    const messageInterval = setInterval(() => {
+      setLoadingMessageIndex((prev) => Math.min(prev + 1, loadingMessages.length - 1));
+    }, 60000);
 
     try {
       const results = [];
@@ -219,7 +235,7 @@ export default function App() {
             if (prev >= maxSimulatedProgress) return prev;
             return prev + 1;
           });
-        }, 180);
+        }, 3600);
 
         const data = await analyzePdf(currentFile);
         results.push(data);
@@ -245,6 +261,7 @@ export default function App() {
     } catch (err) {
       setError(err.message || 'Se ha producido un error durante el análisis.');
     } finally {
+      clearInterval(messageInterval);
       setLoading(false);
       setCurrentFileName('');
     }
@@ -360,7 +377,7 @@ export default function App() {
                 <div className="loader" />
                 <div style={{ width: '100%' }}>
                   <p>
-                    Analizando {files.length} documento(s)... ({progress}%)
+                    {loadingMessages[loadingMessageIndex]} ({progress}%)
                   </p>
                   <div className="progressBar">
                     <div
