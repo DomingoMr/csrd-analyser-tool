@@ -22,5 +22,12 @@ export async function analyzePdf(file) {
     throw new Error(error.message || 'Se ha producido un error al analizar el PDF.');
   }
 
-  return response.json();
+  const result = await response.json();
+  
+  // Como usamos "streaming" en el backend (status 200 siempre), comprobamos el JSON
+  if (result.error) {
+    throw new Error(result.message || 'Error durante el análisis del PDF.');
+  }
+
+  return result;
 }
