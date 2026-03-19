@@ -164,6 +164,8 @@ export default function App() {
 
     setFiles((prevFiles) => {
       const mergedFiles = [...prevFiles];
+      let currentTotalSize = mergedFiles.reduce((acc, f) => acc + f.size, 0);
+      let limitExceeded = false;
 
       for (const incomingFile of incomingFiles) {
         const alreadyExists = mergedFiles.some(
@@ -174,17 +176,25 @@ export default function App() {
         );
 
         if (!alreadyExists) {
-          // Límite de tamaño: 15MB
-          const sizeInMB = incomingFile.size / (1024 * 1024);
+          const newTotalSize = currentTotalSize + incomingFile.size;
+          const sizeInMB = newTotalSize / (1024 * 1024);
+          
           if (sizeInMB > MAX_FILE_SIZE_MB) {
-            setModalConfig({
-              title: "Archivo demasiado pesado",
-              message: `El archivo "${incomingFile.name}" supera el límite gratuito de la plataforma (${MAX_FILE_SIZE_MB}MB). No te preocupes, envíanos el documento directamente por email y nuestros expertos te harán una primera propuesta de análisis de forma totalmente gratuita y sin compromiso.`
-            });
-            continue;
+            limitExceeded = true;
+            break; // Bloquea añadir más archivos si nos pasamos del límite
           }
+          
+          currentTotalSize = newTotalSize;
           mergedFiles.push(incomingFile);
         }
+      }
+
+      if (limitExceeded) {
+        setModalConfig({
+          title: "Límite de tamaño excedido",
+          message: `El peso total de los documentos no puede superar los ${MAX_FILE_SIZE_MB}MB en esta versión gratuita (para no colapsar la IA). Por favor, envíanos los documentos directamente por email y nuestros expertos te harán una primera propuesta de análisis sin compromiso.`
+        });
+        return prevFiles; // Rechazamos la tanda de archivos enteros que colma el vaso
       }
 
       if (mergedFiles.length > MAX_FILES) {
