@@ -4,9 +4,14 @@ import CsvDownloadButton from './components/CsvDownloadButton';
 
 const categoryOrder = ['E', 'S', 'G'];
 const MAX_FILES = 4;
+const MAX_USES = 1;
+const EMAIL_CONTACT = 'jgil@etreeenergy.es';
+// Límite conservador para evitar cuelgues masivos y sobrepasar el límite de tokens de OpenAI en informes muy densos
+const MAX_FILE_SIZE_MB = 15;
 
-const loadingMessages = [
-  "Analizando documento... Tiempo estimado: 5 minutos",
+// Mensajes base, el primero se sustituirá dinámicamente con la estimación
+const baseLoadingMessages = [
+  "Analizando documento...",
   "Admirando los colores y las imagenes...",
   "Aprovecha para tomarte un café o un té",
   "Te diría que te relajes, pero no quiero que te duermas",
@@ -94,6 +99,8 @@ export default function App() {
   const [progress, setProgress] = useState(0);
   const [currentFileName, setCurrentFileName] = useState('');
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [estimatedTotalMinutes, setEstimatedTotalMinutes] = useState(5);
+  const [modalConfig, setModalConfig] = useState(null); // Nuevo estado para el modal
 
   const inputRef = useRef(null);
 
@@ -128,6 +135,23 @@ export default function App() {
     });
   };
 
+  const checkDailyLimit = () => {
+    const today = new Date().toISOString().split('T')[0];
+    let usage = JSON.parse(localStorage.getItem('csrd_usage') || '{}');
+
+    if (usage.date !== today) {
+      usage = { date: today, count: 0 };
+    }
+
+    if (usage.count >= MAX_USES) {
+      return false;
+    }
+
+    usage.count += 1;
+    localStorage.setItem('csrd_usage', JSON.stringify(usage));
+    return true;
+  };
+
   const setSelectedFiles = (selectedFiles) => {
     const incomingFiles = Array.from(selectedFiles || []).filter(
       (file) => file.type === 'application/pdf'
@@ -150,6 +174,15 @@ export default function App() {
         );
 
         if (!alreadyExists) {
+          // Límite de tamaño: 15MB
+          const sizeInMB = incomingFile.size / (1024 * 1024);
+          if (sizeInMB > MAX_FILE_SIZE_MB) {
+            setModalConfig({
+              title: "Archivo demasiado pesado",
+              message: `El archivo "${incomingFile.name}" supera el límite gratuito de la plataforma (${MAX_FILE_SIZE_MB}MB). No te preocupes, envíanos el documento directamente por email y nuestros expertos te harán una primera propuesta de análisis de forma totalmente gratuita y sin compromiso.`
+            });
+            continue;
+          }
           mergedFiles.push(incomingFile);
         }
       }
@@ -206,6 +239,14 @@ export default function App() {
       return;
     }
 
+    if (!checkDailyLimit()) {
+      setModalConfig({
+        title: "Límite diario alcanzado",
+        message: "Has superado el número de pruebas gratuitas por hoy. Si necesitas seguir analizando documentos, envíanos un correo ahora mismo y realizaremos un primer análisis de forma completamente gratuita."
+      });
+      return;
+    }
+
     setLoading(true);
     setError('');
     setResult(null);
@@ -213,9 +254,18 @@ export default function App() {
     setCurrentFileName('');
     setLoadingMessageIndex(0);
 
+    const totalSizeInMB = files.reduce((acc, f) => acc + f.size, 0) / (1024 * 1024);
+    // 2 MB = ~5 minutos -> 2.5 mins por MB
+    const totalMinutes = Math.max(1, Math.ceil(totalSizeInMB * 2.5));
+    setEstimatedTotalMinutes(totalMinutes);
+
+    // El progreso se actualizará para rellenarse a lo largo del total estimado
+    // 100% de la barra = totalMinutes * 60 segundos
+    const msPerPercent = (totalMinutes * 60000) / 100;
+
     const messageInterval = setInterval(() => {
-      setLoadingMessageIndex((prev) => Math.min(prev + 1, loadingMessages.length - 1));
-    }, 60000);
+      setLoadingMessageIndex((prev) => Math.min(prev + 1, baseLoadingMessages.length - 1));
+    }, Math.max(60000, (totalMinutes * 60000) / baseLoadingMessages.length));
 
     try {
       const results = [];
@@ -235,7 +285,7 @@ export default function App() {
             if (prev >= maxSimulatedProgress) return prev;
             return prev + 1;
           });
-        }, 3600);
+        }, msPerPercent / files.length); // Ajustado para avanzar al compás de la estimación total
 
         const data = await analyzePdf(currentFile);
         results.push(data);
@@ -273,6 +323,26 @@ export default function App() {
 
   return (
     <div className="page">
+      {modalConfig && (
+        <div className="modalOverlay" onClick={() => setModalConfig(null)}>
+          <div className="modalCard" onClick={e => e.stopPropagation()}>
+            <h2>{modalConfig.title}</h2>
+            <p>{modalConfig.message}</p>
+            <div className="modalActions">
+              <a
+                href={`mailto:${EMAIL_CONTACT}?subject=Solicitud de análisis CSRD gratuito`}
+                className="primaryButton"
+                style={{ textDecoration: 'none', display: 'flex', alignItems: 'center' }}
+              >
+                Enviar correo a {EMAIL_CONTACT}
+              </a>
+              <button type="button" className="secondaryButton" onClick={() => setModalConfig(null)}>
+                Volver a la aplicación
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main>
         <header className="hero">
@@ -377,7 +447,9 @@ export default function App() {
                 <div className="loader" />
                 <div style={{ width: '100%' }}>
                   <p>
-                    {loadingMessages[loadingMessageIndex]} ({progress}%)
+                    {loadingMessageIndex === 0
+                      ? `Analizando... Tiempo estimado: ${estimatedTotalMinutes} minuto${estimatedTotalMinutes > 1 ? 's' : ''}`
+                      : baseLoadingMessages[loadingMessageIndex]} ({progress}%)
                   </p>
                   <div className="progressBar">
                     <div
