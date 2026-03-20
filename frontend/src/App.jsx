@@ -4,7 +4,7 @@ import CsvDownloadButton from './components/CsvDownloadButton';
 
 const categoryOrder = ['E', 'S', 'G'];
 const MAX_FILES = 4;
-const MAX_USES = 1;
+const MAX_USES = 10;
 const EMAIL_CONTACT = 'jgil@etreeenergy.es';
 // Límite conservador para evitar cuelgues masivos y sobrepasar el límite de tokens de OpenAI en informes muy densos
 const MAX_FILE_SIZE_MB = 15;
@@ -178,12 +178,12 @@ export default function App() {
         if (!alreadyExists) {
           const newTotalSize = currentTotalSize + incomingFile.size;
           const sizeInMB = newTotalSize / (1024 * 1024);
-          
+
           if (sizeInMB > MAX_FILE_SIZE_MB) {
             limitExceeded = true;
             break; // Bloquea añadir más archivos si nos pasamos del límite
           }
-          
+
           currentTotalSize = newTotalSize;
           mergedFiles.push(incomingFile);
         }
